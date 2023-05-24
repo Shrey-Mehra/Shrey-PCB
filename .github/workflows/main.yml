@@ -1,0 +1,102 @@
+name: "KiCad CI/CD for main board"
+
+# Controls when the action will run. Triggers the workflow on push or pull request
+# events but only for the master branch
+on: push
+  # push:
+  #   paths:
+  #     - 'src/*.sch'
+  #     - 'src/*.kicad_pcb'
+  #     - 'src/*.kibot.yaml'
+  #     - 'src/Makefile'
+  #     - '.github/workflows/main.yml'
+  # pull_request:
+  #   paths:
+  #     - 'src/*.sch'
+  #     - 'src/*.kicad_pcb'
+  #     - 'src/*.kibot.yaml'
+  #     - 'src/Makefile'
+  #     - '.github/workflows/main.yml'
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  ERC:
+    runs-on: ubuntu-latest
+    container: ghcr.io/inti-cmnb/kicad5_auto:latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Run ERC
+      run: |
+        make -C kibot erc
+
+    - name: Retrieve results
+      uses: actions/upload-artifact@v3
+      with:
+        name: ERC
+        path: kibot/Fabrication
+
+  DRC:
+    runs-on: ubuntu-latest
+    container: ghcr.io/inti-cmnb/kicad5_auto:latest
+    needs: ERC
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Run DRC
+      run: |
+        make -C kibot drc
+
+    - name: Retrieve results
+      uses: actions/upload-artifact@v3
+      with:
+        name: DRC
+        path: kibot/Fabrication
+
+  FabSch:
+    name: Schematic fabrication files
+    runs-on: ubuntu-latest
+    container: ghcr.io/inti-cmnb/kicad5_auto:latest
+    needs: ERC
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Run schematic stuff
+      run: |
+        make -C kibot sch_fab
+
+    - name: Retrieve results
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v3
+      with:
+        name: FabSch
+        path: |
+          kibot/Fabrication/
+          kibot/kibot_error.log
+        if-no-files-found: warn
+
+  FabPCB:
+    name: PCB fabrication files
+    runs-on: ubuntu-latest
+    container: ghcr.io/inti-cmnb/kicad5_auto:latest
+    needs: DRC
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Run PCB stuff
+      run: |
+        make -C kibot pcb_fab
+
+    - name: Retrieve results
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v3
+      with:
+        name: FabPCB
+        path: |
+          kibot/Fabrication/
+          kibot/kibot_error.log
+        if-no-files-found: warn
